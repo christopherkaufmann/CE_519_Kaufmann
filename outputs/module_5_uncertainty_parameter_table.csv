@@ -1,0 +1,15 @@
+name,distribution,low,high,mean,std,alpha,beta,units,reference,description
+concrete_unit_cost,uniform,150.0,230.0,,,,,$/cy,"RSMeans line item, user-selected edition; range for uncertainty screening.",Ready-mix concrete unit cost.
+stone_57_unit_cost,uniform,45.0,75.0,,,,,$/cy,"RSMeans line item, user-selected edition; range for uncertainty screening.",#57 stone unit cost.
+rebar_unit_cost,uniform,2600.0,3900.0,,,,,$/ton,"RSMeans line item, user-selected edition; range for uncertainty screening.",Reinforcing steel unit cost.
+fiber_unit_cost,uniform,1.323,1.47,,,,,$/lb,"Parsons Corporation Euclid Chemical Pricing Agreement, February 2026; lower bound represents 90% contract price with volume discount.",TUF-STRAND SF unit cost with volume-discount uncertainty.
+demolition_cost,uniform,32.0,55.0,,,,,$/cy,"RSMeans demolition line item, user-selected edition; range for uncertainty screening.",End-of-life concrete demolition cost.
+crushing_cost,uniform,6.0,13.0,,,,,$/ton,RSMeans crushing/recycling line item or local recycler quote; range for uncertainty screening.,End-of-life concrete crushing cost.
+recycled_aggregate_credit,uniform,3.0,9.0,,,,,$/ton,Local recycled aggregate value; range for uncertainty screening.,Credit for demolished concrete reused as crushed concrete aggregate.
+discount_rate,normal_trunc,0.0,0.08,0.03,0.01,,,decimal,FHWA LCCA practice; bounded real discount-rate screening assumption.,Real discount rate used for end-of-life present value.
+concrete_gwp_factor,beta_scaled,0.8,1.25,,,2.0,3.0,multiplier,ecoinvent/APOS concrete process factor uncertainty screening.,Multiplier on concrete production GWP factor.
+stone_57_gwp_factor,beta_scaled,0.75,1.35,,,2.0,3.0,multiplier,ecoinvent/APOS crushed aggregate process factor uncertainty screening.,Multiplier on #57 stone production GWP factor.
+rebar_gwp_factor,beta_scaled,0.75,1.35,,,2.0,3.0,multiplier,CRSI fabricated rebar EPD A1-A3 GWP uncertainty screening.,Multiplier on reinforcing steel production GWP factor.
+trucking_gwp_factor,beta_scaled,0.8,1.3,,,2.0,3.0,multiplier,ecoinvent/APOS lorry transport process factor uncertainty screening.,Multiplier on trucking/hauling GWP factor.
+demolition_gwp_factor,beta_scaled,0.7,1.5,,,2.0,3.0,multiplier,ecoinvent/APOS diesel equipment proxy uncertainty screening.,Multiplier on demolition GWP factor.
+crushing_gwp_factor,beta_scaled,0.7,1.5,,,2.0,3.0,multiplier,ecoinvent/APOS concrete crushing/recycling proxy uncertainty screening.,Multiplier on concrete crushing GWP factor.
