@@ -7,6 +7,7 @@ demolition_cost,uniform,32.0,55.0,,,,,$/cy,"RSMeans demolition line item, user-s
 crushing_cost,uniform,6.0,13.0,,,,,$/ton,RSMeans crushing/recycling line item or local recycler quote; range for uncertainty screening.,End-of-life concrete crushing cost.
 recycled_aggregate_credit,uniform,3.0,9.0,,,,,$/ton,Local recycled aggregate value; range for uncertainty screening.,Credit for demolished concrete reused as crushed concrete aggregate.
 discount_rate,normal_trunc,0.0,0.08,0.03,0.01,,,decimal,FHWA LCCA practice; bounded real discount-rate screening assumption.,Real discount rate used for end-of-life present value.
+subgrade_k_pci,uniform,75.0,150.0,,,,,pci,PCA rigid pavement design guidance; conservative screening range around project baseline k.,Subgrade modulus used to screen design-demand uncertainty only.
 concrete_gwp_factor,beta_scaled,0.8,1.25,,,2.0,3.0,multiplier,ecoinvent/APOS concrete process factor uncertainty screening.,Multiplier on concrete production GWP factor.
 stone_57_gwp_factor,beta_scaled,0.75,1.35,,,2.0,3.0,multiplier,ecoinvent/APOS crushed aggregate process factor uncertainty screening.,Multiplier on #57 stone production GWP factor.
 rebar_gwp_factor,beta_scaled,0.75,1.35,,,2.0,3.0,multiplier,CRSI fabricated rebar EPD A1-A3 GWP uncertainty screening.,Multiplier on reinforcing steel production GWP factor.

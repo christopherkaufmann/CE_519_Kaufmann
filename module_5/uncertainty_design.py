@@ -1,6 +1,6 @@
 """Module 5 – uncertainty and sensitivity (Deliverable 6).
 Monte Carlo sampling and Spearman rank sensitivity.
-Refs: FHWA 2002; RSMeans/Gordian 2026; ecoinvent/Wernet 2016.
+Refs: FHWA 2002; RSMeans/Gordian 2026; ecoinvent/Wernet 2016; PCA 1984.
 """
 from __future__ import annotations
 
@@ -44,6 +44,10 @@ class UncertaintyInputs:
 
     truck_transport_kgco2e_per_ton_mile_nominal: float = 0.17
     tufstrand_sf_kgco2e_per_kg: float = 3.08
+
+    base_subgrade_k_pci: float = 100.0  # Module 1 baseline k before subbase improvement
+    concrete_Ec_psi: float = 57000.0 * math.sqrt(4500.0)  # ACI 318-19 normal-weight Ec
+    poisson_ratio: float = 0.15
 
     include_virgin_aggregate_credit_lca: bool = False
 
@@ -127,6 +131,15 @@ def build_default_uncertain_parameters() -> list[UncertainParameter]:
             description="Real discount rate used for end-of-life present value.",
         ),
         UncertainParameter(
+            name="subgrade_k_pci",
+            distribution="uniform",
+            low=75.0,
+            high=150.0,
+            units="pci",
+            reference="PCA rigid pavement design guidance; conservative screening range around project baseline k.",
+            description="Subgrade modulus used to screen design-demand uncertainty only.",
+        ),
+        UncertainParameter(
             name="concrete_gwp_factor",
             distribution="beta_scaled",
             low=0.80,
@@ -204,7 +217,7 @@ def sample_uncertain_parameters(
     samples: dict[str, np.ndarray] = {}
 
     for parameter in parameters:
-        # Uniform = bounded cost uncertainty; Deliverable 6.
+        # Uniform = bounded uncertainty; ranges intentionally conservative unless project data are available.
         if parameter.distribution == "uniform":
             values = rng.uniform(parameter.low, parameter.high, inputs.n_simulations)
 
@@ -308,6 +321,7 @@ def calculate_lca_simulation(
     stone_gwp_base = get_float(row, "gwp_57_stone_kgco2e")
     rebar_gwp_base = get_float(row, "gwp_reinforcing_steel_kgco2e")
     transport_gwp_base = get_float(row, "gwp_transport_kgco2e")
+    construction_equipment_gwp_base = get_float(row, "gwp_construction_equipment_kgco2e")
     demolition_gwp_base = get_float(row, "gwp_demolition_kgco2e")
     crushing_gwp_base = get_float(row, "gwp_crushing_kgco2e")
 
@@ -319,12 +333,55 @@ def calculate_lca_simulation(
         + stone_gwp_base * samples["stone_57_gwp_factor"].to_numpy()
         + rebar_gwp_base * samples["rebar_gwp_factor"].to_numpy()
         + transport_gwp_base * samples["trucking_gwp_factor"].to_numpy()
+        + construction_equipment_gwp_base * samples["demolition_gwp_factor"].to_numpy()
         + demolition_gwp_base * samples["demolition_gwp_factor"].to_numpy()
         + crushing_gwp_base * samples["crushing_gwp_factor"].to_numpy()
         + tufstrand_gwp
     )
 
     return total
+
+
+def calculate_design_k_simulation(
+    row: pd.Series,
+    samples: pd.DataFrame,
+    inputs: UncertaintyInputs,
+) -> np.ndarray:
+
+    if "subgrade_k_pci" not in samples.columns:
+        return np.full(inputs.n_simulations, get_float(row, "demand_capacity_ratio", math.nan))
+
+    h_in = get_float(row, "pavement_thickness_in")
+    phi_mn = get_float(row, "phi_Mn_kip_in_per_ft")
+    if phi_mn <= 0:
+        phi_mn = get_float(row, "phi_Mtotal_FRC_kip_in_per_ft")
+
+    wheel_load_lb = get_float(row, "wheel_load_kip") * 1000.0
+    tire_pressure = get_float(row, "tire_pressure_psi")
+
+    if h_in <= 0 or phi_mn <= 0 or wheel_load_lb <= 0 or tire_pressure <= 0:
+        return np.full(inputs.n_simulations, math.nan)
+
+    k_base_eff = get_float(row, "k_eff_pci")
+    if k_base_eff <= 0:
+        k_base_eff = inputs.base_subgrade_k_pci
+
+    subgrade_factor = k_base_eff / inputs.base_subgrade_k_pci
+    k_eff = samples["subgrade_k_pci"].to_numpy() * subgrade_factor
+
+    # Westergaard/PCA sensitivity to k only; other Module 1 inputs held fixed.
+    l_in = ((inputs.concrete_Ec_psi * h_in**3) / (12.0 * k_eff * (1.0 - inputs.poisson_ratio**2))) ** 0.25
+    contact_radius = np.sqrt((wheel_load_lb / tire_pressure) / math.pi)
+
+    if contact_radius < 1.724 * h_in:
+        b_in = math.sqrt(1.6 * contact_radius**2 + h_in**2) - 0.675 * h_in
+    else:
+        b_in = contact_radius
+
+    edge_stress = (0.572 * wheel_load_lb / h_in**2) * (4.0 * np.log10(l_in / b_in) + 0.359)
+    mu = (edge_stress * 12.0 * h_in**2 / 6.0) / 1000.0
+
+    return mu / phi_mn
 
 
 def summarize_simulation(values: np.ndarray, prefix: str) -> dict[str, float]:
@@ -340,20 +397,56 @@ def summarize_simulation(values: np.ndarray, prefix: str) -> dict[str, float]:
     }
 
 
+# Output-specific parameter groups keep the Spearman plots tied to the physics/economics
+# of each result. Cost variables belong on LCC sensitivity; environmental multiplier
+# variables belong on LCA sensitivity. This avoids showing cost-only variables such as
+# fiber_unit_cost or crushing_cost on the LCA Spearman chart.
+# Refs: FHWA LCCA present-worth framework; ISO 14040/14044 LCA inventory-to-impact method.
+LCC_SENSITIVITY_PARAMETERS = [
+    "concrete_unit_cost",
+    "stone_57_unit_cost",
+    "rebar_unit_cost",
+    "fiber_unit_cost",
+    "demolition_cost",
+    "crushing_cost",
+    "recycled_aggregate_credit",
+    "discount_rate",
+]
+
+LCA_SENSITIVITY_PARAMETERS = [
+    "concrete_gwp_factor",
+    "stone_57_gwp_factor",
+    "rebar_gwp_factor",
+    "trucking_gwp_factor",
+    "demolition_gwp_factor",
+    "crushing_gwp_factor",
+]
+
+DESIGN_K_SENSITIVITY_PARAMETERS = [
+    "subgrade_k_pci",
+]
+
+
 # Spearman rank sensitivity; Deliverable 6 selected method for nonlinear screening.
 def calculate_spearman_sensitivity(
     samples: pd.DataFrame,
     output_values: np.ndarray,
     output_name: str,
     alternative_id: int,
+    ranked_samples: pd.DataFrame | None = None,
+    parameter_names: list[str] | None = None,
 ) -> list[dict[str, Any]]:
 
-    ranked_samples = samples.rank(method="average")
+    ranked_samples = ranked_samples if ranked_samples is not None else samples.rank(method="average")
     ranked_output = pd.Series(output_values).rank(method="average")
 
     sensitivity_rows: list[dict[str, Any]] = []
+    parameters_to_evaluate = parameter_names or list(samples.columns)
 
-    for parameter_name in samples.columns:
+    for parameter_name in parameters_to_evaluate:
+        if parameter_name not in ranked_samples.columns:
+            continue
+
         rho = ranked_samples[parameter_name].corr(ranked_output, method="pearson")
 
         sensitivity_rows.append(
@@ -380,6 +473,7 @@ def run_module_5_uncertainty(
     inputs = inputs or UncertaintyInputs()
 
     samples = sample_uncertain_parameters(parameters, inputs)
+    ranked_samples = samples.rank(method="average")
 
     lcc_df = pd.DataFrame(lcc_results)
     lca_df = pd.DataFrame(lca_results)
@@ -429,8 +523,11 @@ def run_module_5_uncertainty(
             "random_seed": inputs.random_seed,
         }
 
+        design_k_values = calculate_design_k_simulation(row, samples, inputs)
+
         summary.update(summarize_simulation(lcc_values, "total_present_worth"))
         summary.update(summarize_simulation(lca_values, "gwp_total_project_kgco2e"))
+        summary.update(summarize_simulation(design_k_values, "demand_capacity_ratio_k"))
 
         summary_results.append(summary)
 
@@ -440,6 +537,8 @@ def run_module_5_uncertainty(
                 lcc_values,
                 "total_present_worth",
                 alternative_id,
+                ranked_samples=ranked_samples,
+                parameter_names=LCC_SENSITIVITY_PARAMETERS,
             )
         )
 
@@ -449,6 +548,19 @@ def run_module_5_uncertainty(
                 lca_values,
                 "gwp_total_project_kgco2e",
                 alternative_id,
+                ranked_samples=ranked_samples,
+                parameter_names=LCA_SENSITIVITY_PARAMETERS,
+            )
+        )
+
+        sensitivity_results.extend(
+            calculate_spearman_sensitivity(
+                samples,
+                design_k_values,
+                "demand_capacity_ratio_k",
+                alternative_id,
+                ranked_samples=ranked_samples,
+                parameter_names=DESIGN_K_SENSITIVITY_PARAMETERS,
             )
         )
 

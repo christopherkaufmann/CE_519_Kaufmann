@@ -47,6 +47,23 @@ class LCCInputs:
     contingency_factor: float = 1.00
 
 
+
+def build_unit_cost_table(costs: RSMeansUnitCosts | None = None) -> list[dict[str, Any]]:
+
+    costs = costs or RSMeansUnitCosts()
+
+    # Unit-cost table required by Deliverable 4 feedback; ranges align with Module 5.
+    return [
+        {"name": "c_conc", "description": "concrete", "baseline": costs.concrete_cost_per_cy, "low": 150.0, "high": 230.0, "units": "$/cy", "reference": "RSMeans/Gordian 2026"},
+        {"name": "c_base", "description": "#57 stone", "baseline": costs.stone_57_cost_per_cy, "low": 45.0, "high": 75.0, "units": "$/cy", "reference": "RSMeans/Gordian 2026"},
+        {"name": "c_rebar", "description": "reinforcing steel", "baseline": costs.reinforcing_steel_cost_per_ton, "low": 2600.0, "high": 3900.0, "units": "$/ton", "reference": "RSMeans/Gordian 2026"},
+        {"name": "c_fiber", "description": "TUF-STRAND SF", "baseline": costs.tufstrand_sf_cost_per_lb, "low": 1.323, "high": 1.47, "units": "$/lb", "reference": "Parsons/Euclid 2026"},
+        {"name": "c_demo", "description": "concrete demolition", "baseline": costs.concrete_demolition_cost_per_cy, "low": 32.0, "high": 55.0, "units": "$/cy", "reference": "RSMeans/Gordian 2026"},
+        {"name": "c_crush", "description": "concrete crushing", "baseline": costs.concrete_crushing_cost_per_ton, "low": 6.0, "high": 13.0, "units": "$/ton", "reference": "RSMeans/local recycler"},
+        {"name": "c_subbase_remove", "description": "subbase removal", "baseline": costs.subbase_removal_cost_per_cy, "low": 15.0, "high": 22.0, "units": "$/cy", "reference": "RSMeans/Gordian 2026"},
+        {"name": "c_credit", "description": "recycled aggregate credit", "baseline": costs.recycled_concrete_aggregate_credit_per_ton, "low": 3.0, "high": 9.0, "units": "$/ton", "reference": "local recycled aggregate value"},
+    ]
+
 def calculate_present_value_factor(
     real_discount_rate: float,
     year: int,

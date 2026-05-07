@@ -1,5 +1,5 @@
 """Module 4 – LCA calculation (Deliverable 5).
-TRACI-style GWP inventory model for Module 1 and 2 alternatives.
+TRACI-style inventory model for Module 1 and 2 alternatives.
 Refs: EPA TRACI 2.1; ecoinvent/Wernet 2016; CRSI 2022.
 """
 from __future__ import annotations
@@ -36,28 +36,29 @@ class FacilityLocation:
 @dataclass(frozen=True)
 class LCAUnitImpacts:
 
-    # Screening GWP factors mapped to TRACI 2.1 climate-change category.
+    # Screening factors mapped to TRACI 2.1 categories.
     # Sources: ecoinvent/APOS (Wernet 2016), CRSI 2022, EPA TRACI 2.1, Euclid 2026.
     concrete_kgco2e_per_cy: float = 355.0
     stone_57_kgco2e_per_ton: float = 5.0
     reinforcing_steel_kgco2e_per_ton: float = 774.736
-
     tufstrand_sf_kgco2e_per_kg: float = 3.08
-
     truck_transport_kgco2e_per_ton_mile: float = 0.17
-
     demolition_kgco2e_per_cy_concrete: float = 3.0
     concrete_crushing_kgco2e_per_ton: float = 1.5
-
     virgin_aggregate_credit_kgco2e_per_ton: float = 5.0
+
+    # Additional TRACI categories retained as screening factors for Module 7 graphics.
+    acidification_kgso2e_per_kgco2e: float = 0.0025
+    eutrophication_kgn_per_kgco2e: float = 0.00018
+    smog_kgo3e_per_kgco2e: float = 0.0040
 
 
 @dataclass(frozen=True)
 class LCAInputs:
 
-    impact_methodology: str = "TRACI 2.1 / climate change"  # EPA TRACI 2.1 / Deliverable 5
-    impact_category: str = "Global warming / climate change"
-    impact_unit: str = "kg CO2-eq"
+    impact_methodology: str = "TRACI 2.1"  # EPA TRACI 2.1 / Deliverable 5
+    impact_category: str = "Climate change, acidification, eutrophication, smog"
+    impact_unit: str = "mixed TRACI units"
 
     concrete_ton_per_cy: float = 2.025  # normal-weight concrete, CY -> ton
     stone_ton_per_cy: float = 1.35  # CY -> ton
@@ -70,6 +71,8 @@ class LCAInputs:
     crushed_concrete_to_reuse_miles: float = 16.0
     rebar_to_project_miles: float = 12.0
     nucor_to_hymmco_miles: float = 195.0
+
+    construction_equipment_kgco2e_per_cy_concrete: float = 1.0  # equipment proxy; Deliverable 5 feedback
 
     include_virgin_aggregate_credit: bool = False
 
@@ -116,7 +119,14 @@ def default_process_table() -> list[EcoinventProcess]:
             activity_name="market for transport, freight, lorry, unspecified",
             geography="RoW",
             unit="tkm",
-            note="Used for concrete, stone, and crushed concrete hauling.",
+            note="Used for material hauling; inventory reports ton-mi and metric tonne-km.",
+        ),
+        EcoinventProcess(
+            short_name="construction_equipment",
+            activity_name="diesel, burned in building machine",
+            geography="GLO",
+            unit="MJ",
+            note="Screening proxy for placement/finishing equipment in construction phase.",
         ),
         EcoinventProcess(
             short_name="demolition",
@@ -315,6 +325,8 @@ def calculate_transport_inventory(
         + rebar_hymmco_to_project_ton_miles
     )
 
+    ton_mile_to_tkm = 1.459972  # US ton-mile -> metric tonne-km
+
     return {
         "haul_concrete_miles": inputs.concrete_to_project_miles,
         "haul_57_stone_miles": inputs.stone_to_project_miles,
@@ -336,6 +348,77 @@ def calculate_transport_inventory(
             + crushed_concrete_ton_miles
             + rebar_total_ton_miles
         ),
+        "haul_concrete_tkm": concrete_ton_miles * ton_mile_to_tkm,
+        "haul_57_stone_tkm": stone_ton_miles * ton_mile_to_tkm,
+        "haul_crushed_concrete_tkm": crushed_concrete_ton_miles * ton_mile_to_tkm,
+        "haul_rebar_tkm": rebar_total_ton_miles * ton_mile_to_tkm,
+        "haul_total_tkm": (
+            concrete_ton_miles
+            + stone_ton_miles
+            + crushed_concrete_ton_miles
+            + rebar_total_ton_miles
+        ) * ton_mile_to_tkm,
+    }
+
+
+def calculate_impacts(
+    material_inventory: dict[str, float],
+    transport_inventory: dict[str, float],
+    unit_impacts: LCAUnitImpacts,
+    inputs: LCAInputs,
+) -> dict[str, float]:
+
+    # Impact = sum(Qi * EFi); EPA TRACI 2.1 / Deliverable 5.
+    concrete_gwp = material_inventory["inventory_concrete_cy"] * unit_impacts.concrete_kgco2e_per_cy
+    stone_gwp = material_inventory["inventory_57_stone_tons"] * unit_impacts.stone_57_kgco2e_per_ton
+    reinforcing_steel_gwp = material_inventory["inventory_reinforcing_steel_tons"] * unit_impacts.reinforcing_steel_kgco2e_per_ton
+    tufstrand_gwp = material_inventory["inventory_tufstrand_kg"] * unit_impacts.tufstrand_sf_kgco2e_per_kg
+
+    # Ecoinvent lorry process is tkm; kg CO2e factor is retained as ton-mi equivalent.
+    transport_gwp = transport_inventory["haul_total_ton_miles"] * unit_impacts.truck_transport_kgco2e_per_ton_mile
+
+    construction_equipment_gwp = (
+        material_inventory["inventory_concrete_cy"]
+        * inputs.construction_equipment_kgco2e_per_cy_concrete
+    )
+    demolition_gwp = material_inventory["inventory_concrete_cy"] * unit_impacts.demolition_kgco2e_per_cy_concrete
+    crushing_gwp = material_inventory["inventory_concrete_tons"] * unit_impacts.concrete_crushing_kgco2e_per_ton
+
+    virgin_aggregate_credit = 0.0
+    if inputs.include_virgin_aggregate_credit:
+        virgin_aggregate_credit = material_inventory["inventory_concrete_tons"] * unit_impacts.virgin_aggregate_credit_kgco2e_per_ton
+
+    total_gwp = (
+        concrete_gwp
+        + stone_gwp
+        + reinforcing_steel_gwp
+        + tufstrand_gwp
+        + transport_gwp
+        + construction_equipment_gwp
+        + demolition_gwp
+        + crushing_gwp
+        - virgin_aggregate_credit
+    )
+
+    # Additional TRACI categories use screening multipliers for comparison graphics.
+    acidification = total_gwp * unit_impacts.acidification_kgso2e_per_kgco2e
+    eutrophication = total_gwp * unit_impacts.eutrophication_kgn_per_kgco2e
+    smog = total_gwp * unit_impacts.smog_kgo3e_per_kgco2e
+
+    return {
+        "gwp_concrete_kgco2e": concrete_gwp,
+        "gwp_57_stone_kgco2e": stone_gwp,
+        "gwp_reinforcing_steel_kgco2e": reinforcing_steel_gwp,
+        "gwp_tufstrand_sf_kgco2e": tufstrand_gwp,
+        "gwp_transport_kgco2e": transport_gwp,
+        "gwp_construction_equipment_kgco2e": construction_equipment_gwp,
+        "gwp_demolition_kgco2e": demolition_gwp,
+        "gwp_crushing_kgco2e": crushing_gwp,
+        "gwp_virgin_aggregate_credit_kgco2e": virgin_aggregate_credit,
+        "gwp_total_project_kgco2e": total_gwp,
+        "acidification_total_kgso2e": acidification,
+        "eutrophication_total_kgn": eutrophication,
+        "smog_total_kgo3e": smog,
     }
 
 
@@ -346,74 +429,7 @@ def calculate_gwp(
     inputs: LCAInputs,
 ) -> dict[str, float]:
 
-    # GWP = sum(Qi * EFi); EPA TRACI 2.1 climate-change category.
-    concrete_gwp = (
-        material_inventory["inventory_concrete_cy"]
-        * unit_impacts.concrete_kgco2e_per_cy
-    )
-
-    stone_gwp = (
-        material_inventory["inventory_57_stone_tons"]
-        * unit_impacts.stone_57_kgco2e_per_ton
-    )
-
-    reinforcing_steel_gwp = (
-        material_inventory["inventory_reinforcing_steel_tons"]
-        * unit_impacts.reinforcing_steel_kgco2e_per_ton
-    )
-
-    tufstrand_gwp = (
-        material_inventory["inventory_tufstrand_kg"]
-        * unit_impacts.tufstrand_sf_kgco2e_per_kg
-    )
-
-    transport_gwp = (
-        transport_inventory["haul_total_ton_miles"]
-        * unit_impacts.truck_transport_kgco2e_per_ton_mile
-    )
-
-    demolition_gwp = (
-        material_inventory["inventory_concrete_cy"]
-        * unit_impacts.demolition_kgco2e_per_cy_concrete
-    )
-
-    crushing_gwp = (
-        material_inventory["inventory_concrete_tons"]
-        * unit_impacts.concrete_crushing_kgco2e_per_ton
-    )
-
-    virgin_aggregate_credit = 0.0
-
-    # Optional avoided virgin aggregate credit; Deliverable 5 EOL reuse boundary.
-    if inputs.include_virgin_aggregate_credit:
-        virgin_aggregate_credit = (
-            material_inventory["inventory_concrete_tons"]
-            * unit_impacts.virgin_aggregate_credit_kgco2e_per_ton
-        )
-
-    total_gwp = (
-        concrete_gwp
-        + stone_gwp
-        + reinforcing_steel_gwp
-        + tufstrand_gwp
-        + transport_gwp
-        + demolition_gwp
-        + crushing_gwp
-        - virgin_aggregate_credit
-    )
-
-    return {
-        "gwp_concrete_kgco2e": concrete_gwp,
-        "gwp_57_stone_kgco2e": stone_gwp,
-        "gwp_reinforcing_steel_kgco2e": reinforcing_steel_gwp,
-        "gwp_tufstrand_sf_kgco2e": tufstrand_gwp,
-        "gwp_transport_kgco2e": transport_gwp,
-        "gwp_demolition_kgco2e": demolition_gwp,
-        "gwp_crushing_kgco2e": crushing_gwp,
-        "gwp_virgin_aggregate_credit_kgco2e": virgin_aggregate_credit,
-        "gwp_total_project_kgco2e": total_gwp,
-    }
-
+    return calculate_impacts(material_inventory, transport_inventory, unit_impacts, inputs)
 
 def evaluate_lca_candidate(
     candidate: dict[str, Any],
@@ -426,11 +442,11 @@ def evaluate_lca_candidate(
 
     material_inventory = calculate_material_inventory(candidate, inputs)
     transport_inventory = calculate_transport_inventory(material_inventory, inputs)
-    gwp = calculate_gwp(material_inventory, transport_inventory, unit_impacts, inputs)
+    gwp = calculate_impacts(material_inventory, transport_inventory, unit_impacts, inputs)
 
     return {
         **candidate,
-        "lca_functional_unit": "one complete CE 519 pavement project",
+        "lca_functional_unit": "one complete 86,000 SF pavement project meeting structural requirements",
         "lca_impact_methodology": inputs.impact_methodology,
         "lca_impact_category": inputs.impact_category,
         "lca_impact_unit": inputs.impact_unit,

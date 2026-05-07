@@ -2,7 +2,7 @@
 
 ## 1. Introduction
 
-This technical document describes the methodology and implementation of a mechanistic and life-cycle-based evaluation program for concrete pavement systems. The program compares steel reinforced concrete (SRC) and fiber reinforced concrete (FRC) alternatives for a defined CE 519 project footprint. The workflow includes structural design, life-cycle cost analysis (LCCA), life-cycle assessment (LCA), uncertainty and sensitivity analysis, optimization/selection, and a planned summary graphics module. All calculations are executed from the parent-level `Program_Control.ipynb` notebook, which coordinates Modules 1 through 7. This program directly implements the methodologies defined in CE 519 Deliverables 3 through 6, with Module 7 reserved for future summary-output graphics.
+This technical document describes the methodology and implementation of a mechanistic and life-cycle-based evaluation program for concrete pavement systems. The program compares steel reinforced concrete (SRC) and fiber reinforced concrete (FRC) alternatives for a defined CE 519 project footprint. The workflow includes structural design, life-cycle cost analysis (LCCA), life-cycle assessment (LCA), uncertainty and sensitivity analysis, optimization/selection, and a planned summary graphics module. All calculations are executed from the parent-level `Program_Control.ipynb` notebook, which coordinates Modules 1 through 7. This program directly implements the methodologies defined in CE 519 Deliverables 3 through 6, with Module 7 providing post-processing graphics from those outputs.
 
 ## 2. Project Definition
 
@@ -31,7 +31,7 @@ ce519_program/
 ├── module_4/  Life-cycle assessment
 ├── module_5/  Uncertainty and sensitivity analysis
 ├── module_6/  Optimization and selection
-├── module_7/  Summary output graphics (Not Yet Implemented)
+├── module_7/  Summary output graphics
 │
 └── outputs/
 ```
@@ -45,7 +45,7 @@ Module 3: Life-cycle cost analysis -> Deliverable 4, LCC Methodology
 Module 4: Life-cycle assessment -> Deliverable 5, LCA Methodology
 Module 5: Uncertainty and sensitivity analysis -> Deliverable 6, Uncertainty & Sensitivity Analyses
 Module 6: Optimization and selection -> applies the outputs from Modules 1 through 5 for final alternative selection
-Module 7: Summary output graphics -> Not Yet Implemented; planned post-processing of Modules 1 through 6
+Module 7: Summary output graphics -> post-processing of Modules 1 through 6 for presentation/report figures
 ```
 
 ## 4. Module 1: Steel Reinforced Concrete Pavement Design
@@ -145,7 +145,7 @@ The fiber pricing source is the Parsons Corporation Euclid Chemical Pricing Agre
 
 ## 7. Module 4: Life-Cycle Assessment
 
-Module 4 calculates total project climate change impact in kg CO2-eq. The functional unit is one complete CE 519 pavement project consisting of 86,000 sf of pavement.
+Module 4 calculates TRACI-style environmental outputs. Climate change remains the primary metric, and acidification, eutrophication, and smog are retained as screening outputs for comparison graphics. The functional unit is one complete 86,000 sf pavement project meeting the structural requirements from Deliverable 3.
 
 Included processes are:
 
@@ -157,6 +157,7 @@ TUF-STRAND SF production
 Concrete hauling to the project site
 #57 stone hauling to the project site
 Rebar hauling from Nucor Marion, OH to HYMMCO, then HYMMCO to the project site
+Construction equipment screening proxy
 End-of-life demolition
 Crushed concrete hauling
 Concrete crushing for reuse as aggregate
@@ -167,7 +168,6 @@ Excluded processes are:
 ```text
 Maintenance
 Fiber hauling, because fiber is assumed to be included with admixture delivery
-Construction equipment other than explicit demolition energy/emissions
 ```
 
 The CRSI EPD value used for fabricated reinforcing steel is:
@@ -175,6 +175,13 @@ The CRSI EPD value used for fabricated reinforcing steel is:
 ```text
 854 kg CO2-eq / metric ton fabricated rebar
 774.736 kg CO2-eq / short ton fabricated rebar
+```
+
+Transport is tracked in both U.S. ton-miles and metric tonne-km to align with ecoinvent lorry process units:
+
+```text
+tkm = short tons × miles × 1.459972
+transport impact = tkm × ecoinvent lorry factor
 ```
 
 The TUF-STRAND SF GWP value used is:
@@ -185,7 +192,7 @@ The TUF-STRAND SF GWP value used is:
 
 ## 8. Module 5: Uncertainty and Sensitivity Analysis
 
-Module 5 performs Monte Carlo uncertainty analysis and Spearman rank sensitivity analysis. The default simulation count is 50,000 and the random seed is 42. The primary outputs are total present worth and total project GWP.
+Module 5 performs Monte Carlo uncertainty analysis and Spearman rank sensitivity analysis. The default simulation count is 50,000 and the random seed is 42. The primary outputs are total present worth, total project GWP, and design demand/capacity sensitivity to subgrade modulus k.
 
 Uncertain parameters include:
 
@@ -198,6 +205,7 @@ demolition cost
 crushing cost
 recycled aggregate credit
 discount rate
+subgrade modulus k
 concrete GWP factor
 #57 stone GWP factor
 rebar GWP factor
@@ -224,6 +232,7 @@ fiber unit cost ~ Uniform(1.323, 1.47) $/lb
 | Crushing cost | Uniform | 6 to 13 | $/ton | RSMeans / local recycler screening range |
 | Recycled aggregate credit | Uniform | 3 to 9 | $/ton | Assumed local recycled aggregate value range |
 | Discount rate | Truncated normal | mean = 0.03, std = 0.01, bounded 0.00 to 0.08 | decimal | FHWA LCCA practice |
+| Subgrade modulus k | Uniform | 75 to 150 | pci | PCA rigid pavement design guidance; conservative screening around baseline |
 | Concrete GWP factor | Scaled beta | alpha = 2, beta = 3, bounded 0.80 to 1.25 | multiplier | ecoinvent/APOS screening factor |
 | #57 stone GWP factor | Scaled beta | alpha = 2, beta = 3, bounded 0.75 to 1.35 | multiplier | ecoinvent/APOS screening factor |
 | Rebar GWP factor | Scaled beta | alpha = 2, beta = 3, bounded 0.75 to 1.35 | multiplier | CRSI fabricated rebar EPD screening factor |
@@ -292,4 +301,19 @@ Open `Program_Control.ipynb` and run the notebook from top to bottom. The notebo
 
 ## 10. Module 7: Summary Output Graphics
 
-Module 7 is reserved for future plotting and reporting utilities in `module_7/summary_output.py`. Current status: **Not Yet Implemented**. Planned graphics include structural feasibility plots, LCC/LCA comparison plots, uncertainty interval plots, sensitivity rankings, and final selection summary figures.
+Module 7 generates summary figures from Modules 1 through 6 and writes PNG files to `outputs/figures/`. The module also writes a figure manifest to `outputs/module_7_figure_manifest.csv`.
+
+Current figures include:
+
+```text
+module_7_01_feasible_by_thickness.png
+module_7_02_lcc_lca_tradeoff.png
+module_7_03_lcc_breakdown.png
+module_7_04_lca_breakdown.png
+module_7_05_traci_normalized_comparison.png
+module_7_06_lcc_uncertainty_intervals.png
+module_7_07_spearman_sensitivity_ranking.png
+module_7_08_selected_alternative_summary.png
+```
+
+These figures are intended for the final presentation and report graphics workflow.

@@ -1,0 +1,11 @@
+figure,status,path,rows_used
+feasible_by_thickness,created,outputs\figures\module_7_01_feasible_by_thickness.png,8
+lcc_lca_tradeoff,created,outputs\figures\module_7_02_lcc_lca_tradeoff.png,400
+lcc_breakdown,created,outputs\figures\module_7_03_lcc_breakdown.png,2
+lca_breakdown,created,outputs\figures\module_7_04_lca_breakdown.png,2
+traci_comparison,created,outputs\figures\module_7_05_traci_normalized_comparison.png,2
+uncertainty_intervals,created,outputs\figures\module_7_06_lcc_uncertainty_intervals.png,2
+lcc_sensitivity_ranking,created,outputs\figures\module_7_07a_spearman_sensitivity_lcc.png,8
+lca_sensitivity_ranking,created,outputs\figures\module_7_07b_spearman_sensitivity_lca.png,6
+sensitivity_ranking_combined,created,outputs\figures\module_7_07_spearman_sensitivity_ranking_combined.png,10
+selection_summary,created,outputs\figures\module_7_08_selected_alternative_summary.png,2
